@@ -6,7 +6,6 @@ function validate_name() {
     [[ $1 =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]
 }
 
-
 function Create_Table(){
 read -p "Enter Table name: " TBName ;
  TBName="${TBName##+([[:space:]])}"
