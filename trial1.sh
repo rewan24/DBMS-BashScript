@@ -88,9 +88,109 @@ function Insert_into_Table(){
     echo "Record inserted successfully into '$TBName'."
    fi
 }
+function Select_From_Table() {
+    read -p "Enter table name to search in: " TBName
+    path="$databases/$DBName/$TBName"
+
+    if [[ ! -f "$path" ]]; then
+        echo "Table '$TBName' does not exist."
+        return
+    fi
+
+    header=$(head -n 1 "$path")
+    echo "Columns: $header"
+
+    pkColumn=$(echo "$header" | tr ':' '\n' | grep "(pk)")
+    if [[ -z "$pkColumn" ]]; then
+        echo "No primary key column found."
+        return
+    fi
+
+    cleanPk=$(echo "$pkColumn" | sed 's/ *(pk)//g')
+    read -p "Enter value of primary key ($cleanPk): " pkValue
+
+    IFS=':' read -ra columns <<< "$header"
+    for i in "${!columns[@]}"; do
+        col=$(echo "${columns[$i]}" | sed 's/ *(pk)//g')
+        if [[ "$col" == "$cleanPk" ]]; then
+            pkIndex=$i
+            break
+        fi
+    done
+
+    match=0
+    while IFS=':' read -ra row; do
+        if [[ "${row[$pkIndex]}" == "$pkValue" ]]; then
+            echo "Record found:"
+            echo "$header"
+            IFS=':'; echo "${row[*]}"
+            match=1
+            break
+        fi
+    done < <(tail -n +2 "$path")
+
+    [[ $match -eq 0 ]] && echo "No record with $cleanPk = $pkValue"
+}
+
+function Delete_From_Table() {
+    read -p "Enter table name to delete from: " TBName
+     TBName="${TBName##+([[:space:]])}"
+    TBName="${TBName%%+([[:space:]])}"
+    if [[ -f "$databases/$DBName/$TBName" ]]; then
+        echo "Table content:"
+        nl -s ". " "$databases/$DBName/$TBName"
+        read -p "Enter row number to delete : " rowNum
+
+        totalLines=$(wc -l < "$databases/$DBName/$TBName")
+        if (( rowNum > 1 && rowNum <= totalLines )); then
+            sed -i "${rowNum}d" "$databases/$DBName/$TBName"
+            echo "Row $rowNum deleted successfully."
+        else
+            echo "Invalid row number."
+        fi
+    else
+        echo "Table '$TBName' does not exist."
+    fi
+} 
+function Update_Table() {
+    read -p "Enter table name to update: " TBName
+    if [[ -f "$databases/$DBName/$TBName" ]]; then
+        header=$(head -n 1 "$databases/$DBName/$TBName")
+        IFS=':' read -a columns <<< "$header"
+
+        nl -s ". " "$databases/$DBName/$TBName"
+        read -p "Enter row number to update (excluding header): " rowNum
+
+        totalLines=$(wc -l < "$databases/$DBName/$TBName")
+        if (( rowNum > 1 && rowNum <= totalLines )); then
+            echo "Choose column to update:"
+            for i in "${!columns[@]}"; do
+                echo "$((i+1))) ${columns[i]}"
+            done
+            read -p "Enter column number: " colNum
+
+            if (( colNum >= 1 && colNum <= ${#columns[@]} )); then
+                read -p "Enter new value: " newValue
+                oldLine=$(sed -n "${rowNum}p" "$databases/$DBName/$TBName")
+                IFS=':' read -a values <<< "$oldLine"
+                values[$((colNum-1))]=$newValue
+                newLine=$(IFS=:; echo "${values[*]}")
+                sed -i "${rowNum}s/.*/$newLine/" "$databases/$DBName/$TBName"
+                echo "Row updated successfully."
+            else
+                echo "Invalid column number."
+            fi
+        else
+            echo "Invalid row number."
+        fi
+    else
+        echo "Table '$TBName' does not exist."
+    fi
+}
 
 function Connect_To_Databases(){
 DBName=$1
+PS3="Choose an operation: "
 select choice in Create_Table List_Tables Drop_Table Insert_into_Table Select_From_Table Delete_From_Table Update_Table exit
 do
 	case $choice in 
@@ -110,16 +210,17 @@ do
 			Insert_into_Table
 			;;
 		"Select_From_Table")
-			echo "hello2" 
+			Select_From_Table
 			;;
 		"Delete_From_Table")
 		
-			echo "hello3" 
+			Delete_From_Table
 			;;
 		"Update_Table")
-			echo "hello3" 
+			Update_Table
 			;;
 		"exit")
+		        echo "Returned to Main-Menu"
 			break
 			;;
 		*)
@@ -128,17 +229,15 @@ do
 	esac
 done
 }
-#Connect_To_Databases $1
+
                
-#mkdir 
 databases="databases"
 mkdir -p "$databases"
-#chmod u+x databases/*
-
+  echo "Main-Menu"
+PS3="Choose an option: "
 select choice in Create_Database List_Databases Connect_To_Databases Drop_Database exit
 do
 	case $choice in 
-	
 		"Create_Database")
 			read -p "Enter DB name: " DBName ;
 			if validate_name $DBName
